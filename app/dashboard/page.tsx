@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
@@ -59,7 +59,7 @@ function ProjectCardSkeleton() {
 
 export default function Dashboard() {
   const router = useRouter();
-  const supabase = createClient();
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
@@ -92,26 +92,34 @@ export default function Dashboard() {
   // ── Load data ──────────────────────────────────────────────────
 
   const loadProjects = useCallback(async (uid: string) => {
-    const { data } = await supabase
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    const { data } = await sb
       .from("projects")
       .select("*")
       .eq("user_id", uid)
       .order("created_at", { ascending: false });
     setProjects((data ?? []).map(mapProject));
-  }, [supabase]);
+  }, []);
 
   const loadMeetingNotes = useCallback(async (uid: string) => {
-    const { data } = await supabase
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    const { data } = await sb
       .from("meeting_notes")
       .select("*")
       .eq("user_id", uid)
       .order("created_at", { ascending: false });
     setMeetingNotes((data ?? []).map(mapNote));
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser();
+      supabaseRef.current = createClient();
+      const sb = supabaseRef.current;
+      if (!sb) { router.replace("/login"); return; }
+
+      const { data: { user } } = await sb.auth.getUser();
       if (!user) { router.replace("/login"); return; }
 
       setUserEmail(user.email ?? "");
@@ -123,7 +131,7 @@ export default function Dashboard() {
       setIsLoading(false);
     }
     init();
-  }, [router, supabase, loadProjects, loadMeetingNotes]);
+  }, [router, loadProjects, loadMeetingNotes]);
 
   // ── Brief CRUD ─────────────────────────────────────────────────
 
@@ -136,18 +144,20 @@ export default function Dashboard() {
     e.preventDefault();
     const name = newBriefName.trim();
     if (!name || !userId) return;
+    const sb = supabaseRef.current;
+    if (!sb) return;
 
     console.log("[CreateBrief] Step 1 — userId:", userId, "name:", name);
 
     // Step 2 — verify current session user
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: userError } = await sb.auth.getUser();
     console.log("[CreateBrief] Step 2 — auth.getUser:", user?.id, "error:", userError);
     if (!user) { showToast("Session expirée — reconnectez-vous."); return; }
 
     // Step 3 — attempt insert
     const slug = `projet-${Math.random().toString(36).substring(2, 7)}`;
     console.log("[CreateBrief] Step 3 — inserting into projects:", { name, slug, user_id: user.id, status: "pending" });
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from("projects")
       .insert({ name, slug, user_id: user.id, status: "pending" })
       .select()
@@ -170,7 +180,9 @@ export default function Dashboard() {
   }
 
   async function handleDeleteBrief(id: string) {
-    await supabase.from("projects").delete().eq("id", id).eq("user_id", userId);
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    await sb.from("projects").delete().eq("id", id).eq("user_id", userId);
     setProjects((prev) => prev.filter((p) => p.id !== id));
     setDeleteTargetId(null);
     showToast("Brief supprimé.");
@@ -189,7 +201,9 @@ export default function Dashboard() {
 
   async function saveNotes() {
     if (!notesTargetId) return;
-    const { error } = await supabase
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    const { error } = await sb
       .from("projects")
       .update({ notes: notesValue })
       .eq("id", notesTargetId)
@@ -208,8 +222,10 @@ export default function Dashboard() {
   async function saveNote() {
     const title = noteTitle.trim();
     if (!title || !userId) return;
+    const sb = supabaseRef.current;
+    if (!sb) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await sb
       .from("meeting_notes")
       .insert({ title, content: noteContent.trim(), user_id: userId })
       .select()
@@ -224,13 +240,17 @@ export default function Dashboard() {
   }
 
   async function handleDeleteNote(id: string) {
-    await supabase.from("meeting_notes").delete().eq("id", id).eq("user_id", userId);
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    await sb.from("meeting_notes").delete().eq("id", id).eq("user_id", userId);
     setMeetingNotes((prev) => prev.filter((n) => n.id !== id));
     showToast("Note supprimée.");
   }
 
   async function linkNoteToProject(noteId: string, projectId: string) {
-    const { error } = await supabase
+    const sb = supabaseRef.current;
+    if (!sb) return;
+    const { error } = await sb
       .from("meeting_notes")
       .update({ linked_project_id: projectId })
       .eq("id", noteId)
@@ -245,7 +265,7 @@ export default function Dashboard() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await supabaseRef.current?.auth.signOut();
     router.replace("/login");
   }
 

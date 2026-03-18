@@ -1,14 +1,17 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-export function createClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+let client: ReturnType<typeof createBrowserClient> | null = null;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return createBrowserClient(
-      'http://localhost:54321',
-      'placeholder-anon-key'
+export function createClient() {
+  if (typeof window === 'undefined') {
+    // Server/build side — return null, never called at runtime
+    return null as any;
+  }
+  if (!client) {
+    client = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
     );
   }
-  return createBrowserClient(supabaseUrl, supabaseAnonKey);
+  return client;
 }
