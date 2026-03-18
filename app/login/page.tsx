@@ -38,7 +38,7 @@ export default function LoginPage() {
     setInfo("");
     setLoading(true);
 
-    // Debug: verify env vars are loaded
+    console.log("[Auth] Tentative de connexion...");
     console.log("[Auth] SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
     console.log("[Auth] ANON_KEY prefix:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 20));
 
@@ -46,16 +46,23 @@ export default function LoginPage() {
 
     try {
       if (mode === "login") {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
+        console.log("[Auth] Réponse Supabase reçue");
+        console.log("[Auth] Erreur :", JSON.stringify(signInError));
+        console.log("[Auth] Session :", JSON.stringify(signInData?.session));
+
         if (signInError) {
-          console.error("[Auth] signInWithPassword error:", signInError);
-          setError(signInError.message);
+          setError(`Erreur Supabase : ${signInError.message} (status: ${signInError.status ?? "?"})`);
           return;
         }
-        window.location.href = '/dashboard';
+        if (!signInData?.session) {
+          setError("Pas de session reçue — réessayez.");
+          return;
+        }
+        window.location.replace('/dashboard');
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
