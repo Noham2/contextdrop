@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = 'force-dynamic';
 
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "next/navigation";
@@ -6,8 +7,6 @@ import { downloadBriefPDF } from "@/lib/pdf";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
 import type { BriefData } from "@/lib/storage";
-
-export const dynamic = 'force-dynamic';
 
 interface Message {
   role: "user" | "assistant";

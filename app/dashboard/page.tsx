@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -10,8 +11,6 @@ import { Logo } from "@/app/components/Logo";
 import { OnboardingModal } from "@/app/components/OnboardingModal";
 import { getUserPlan, getBriefCountThisMonth, canCreateBrief, getBriefLimit, PLANS, type PlanId } from "@/lib/plans";
 import type { BriefProject, MeetingNote, BriefData } from "@/lib/storage";
-
-export const dynamic = 'force-dynamic';
 
 // ── Supabase row → app type mappers ────────────────────────────
 
