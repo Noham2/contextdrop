@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import { downloadBriefPDF } from "@/lib/pdf";
@@ -58,7 +57,6 @@ function ProjectCardSkeleton() {
 // ── Dashboard ───────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const router = useRouter();
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   const [userEmail, setUserEmail] = useState("");
@@ -91,6 +89,17 @@ export default function Dashboard() {
 
   // ── Load data ──────────────────────────────────────────────────
 
+  // Fast session check — redirect to login before init if no session
+  useEffect(() => {
+    const sb = createClient();
+    if (!sb) return;
+    sb.auth.getSession().then((result: { data: { session: unknown } }) => {
+      if (!result.data.session) {
+        window.location.href = '/login';
+      }
+    });
+  }, []);
+
   const loadProjects = useCallback(async (uid: string) => {
     const sb = supabaseRef.current;
     if (!sb) return;
@@ -117,10 +126,10 @@ export default function Dashboard() {
     async function init() {
       supabaseRef.current = createClient();
       const sb = supabaseRef.current;
-      if (!sb) { router.replace("/login"); return; }
+      if (!sb) { window.location.href = '/login'; return; }
 
       const { data: { user } } = await sb.auth.getUser();
-      if (!user) { router.replace("/login"); return; }
+      if (!user) { window.location.href = '/login'; return; }
 
       setUserEmail(user.email ?? "");
       setUserId(user.id);
@@ -131,7 +140,7 @@ export default function Dashboard() {
       setIsLoading(false);
     }
     init();
-  }, [router, loadProjects, loadMeetingNotes]);
+  }, [loadProjects, loadMeetingNotes]);
 
   // ── Brief CRUD ─────────────────────────────────────────────────
 
@@ -266,7 +275,7 @@ export default function Dashboard() {
 
   async function handleLogout() {
     await supabaseRef.current?.auth.signOut();
-    router.replace("/login");
+    window.location.href = '/login';
   }
 
   const limit = getBriefLimit();
