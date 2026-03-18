@@ -2,10 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Only check auth for /dashboard routes — let everything else through
+  if (!pathname.startsWith("/dashboard")) {
+    return NextResponse.next({ request });
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  // If env vars are missing or invalid, let the request through without auth check
+  // If env vars are missing or invalid, let the request through
   if (!supabaseUrl || !supabaseAnonKey || !supabaseUrl.startsWith('http')) {
     return NextResponse.next({ request });
   }
@@ -40,22 +47,15 @@ export async function proxy(request: NextRequest) {
     } = await supabase.auth.getUser();
 
     // Protect /dashboard — redirect unauthenticated users to /login
-    if (!user && request.nextUrl.pathname.startsWith("/dashboard")) {
+    if (!user) {
       const url = request.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
     }
 
-    // Redirect logged-in users away from /login to /dashboard
-    if (user && request.nextUrl.pathname === "/login") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
-
     return supabaseResponse;
   } catch {
-    // If Supabase initialization fails for any reason, let the request through
+    // If Supabase fails for any reason, let the request through
     return NextResponse.next({ request });
   }
 }

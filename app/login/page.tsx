@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
@@ -25,7 +24,6 @@ function friendlyError(msg: string): string {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -57,8 +55,7 @@ export default function LoginPage() {
           setError(signInError.message);
           return;
         }
-        router.push("/dashboard");
-        router.refresh();
+        window.location.href = '/dashboard';
       } else {
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
@@ -85,8 +82,7 @@ export default function LoginPage() {
             body: JSON.stringify({ type: "welcome", email: email.trim() }),
           }).catch(() => {});
 
-          router.push("/dashboard");
-          router.refresh();
+          window.location.href = '/dashboard';
         } else if (data.user && !data.session) {
           // User created but email confirmation required
           setInfo("Compte créé ! Vérifiez votre boîte email pour confirmer votre inscription.");
