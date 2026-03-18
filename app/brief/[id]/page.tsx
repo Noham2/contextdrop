@@ -7,6 +7,8 @@ import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
 import type { BriefData } from "@/lib/storage";
 
+export const dynamic = 'force-dynamic';
+
 interface Message {
   role: "user" | "assistant";
   content: string;
