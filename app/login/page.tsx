@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
 
@@ -24,12 +25,17 @@ function friendlyError(msg: string): string {
 }
 
 export default function LoginPage() {
+  const supabaseRef = useRef<SupabaseClient | null>(null);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    supabaseRef.current = createClient();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,11 +44,8 @@ export default function LoginPage() {
     setInfo("");
     setLoading(true);
 
-    console.log("[Auth] Tentative de connexion...");
-    console.log("[Auth] SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log("[Auth] ANON_KEY prefix:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 20));
-
-    const supabase = createClient();
+    const supabase = supabaseRef.current;
+    if (!supabase) { setLoading(false); return; }
 
     try {
       if (mode === "login") {
