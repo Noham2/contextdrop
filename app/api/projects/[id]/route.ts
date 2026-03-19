@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase-server";
+import { createAdminClient, createServerSupabaseClient } from "@/lib/supabase-server";
 import { sendBriefCompletedEmail } from "@/lib/emails";
 import type { BriefData } from "@/lib/storage";
 
@@ -35,14 +35,49 @@ export async function GET(
   }
 }
 
-// PATCH /api/projects/[id] — save completed brief (no auth required for client)
+// DELETE /api/projects/[id] — delete a project (auth required)
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const supabase = await createServerSupabaseClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    await supabase.from("projects").delete().eq("id", id).eq("user_id", user.id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/projects/[id]]", err);
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+  }
+}
+
+// PATCH /api/projects/[id] — save completed brief (no auth) or update notes (auth)
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const { briefData }: { briefData: BriefData } = await req.json();
+    const body = await req.json();
+
+    // notes update — requires auth
+    if ("notes" in body) {
+      const supabase = await createServerSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const { error } = await supabase
+        .from("projects")
+        .update({ notes: body.notes })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json({ ok: true });
+    }
+
+    const { briefData }: { briefData: BriefData } = body;
 
     if (!briefData || !briefData.objective) {
       return NextResponse.json({ error: "briefData invalide" }, { status: 400 });

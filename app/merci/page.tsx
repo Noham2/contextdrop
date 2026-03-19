@@ -3,7 +3,6 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase";
 
 const PLAN_DETAILS: Record<string, { name: string; price: string; features: string[] }> = {
   solo: {
@@ -31,14 +30,15 @@ function MerciContent() {
 
     async function sendEmail() {
       try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user?.email) return;
+        const res = await fetch("/api/auth/user");
+        if (!res.ok) return;
+        const { email } = await res.json();
+        if (!email) return;
 
         await fetch("/api/emails", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "subscription", email: user.email, plan: planParam }),
+          body: JSON.stringify({ type: "subscription", email, plan: planParam }),
         });
       } catch { /* non-blocking */ }
     }

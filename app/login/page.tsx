@@ -1,8 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { useState } from "react";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
 
@@ -25,17 +23,12 @@ function friendlyError(msg: string): string {
 }
 
 export default function LoginPage() {
-  const supabaseRef = useRef<SupabaseClient | null>(null);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    supabaseRef.current = createClient();
-  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,68 +37,36 @@ export default function LoginPage() {
     setInfo("");
     setLoading(true);
 
-    const supabase = supabaseRef.current;
-    if (!supabase) { setLoading(false); return; }
-
     try {
-      if (mode === "login") {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        console.log("[Auth] Réponse Supabase reçue");
-        console.log("[Auth] Erreur :", JSON.stringify(signInError));
-        console.log("[Auth] Session :", JSON.stringify(signInData?.session));
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, mode }),
+      });
 
-        if (signInError) {
-          setError(`Erreur Supabase : ${signInError.message} (status: ${signInError.status ?? "?"})`);
-          return;
-        }
-        if (!signInData?.session) {
-          setError("Pas de session reçue — réessayez.");
-          return;
-        }
-        window.location.replace('/dashboard');
-      } else {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
-          },
-        });
+      const data = await res.json();
 
-        console.log("[Auth] signUp result — data:", JSON.stringify(data), "error:", signUpError);
+      if (!res.ok) {
+        setError(friendlyError(data.error ?? ""));
+        return;
+      }
 
-        if (signUpError) {
-          console.error("[Auth] signUp error full object:", signUpError);
-          // Show the raw Supabase message for debugging
-          setError(`Supabase: ${signUpError.message} (status: ${signUpError.status ?? "?"})`);
-          return;
-        }
-
-        // If session is present, user is immediately active (no email confirmation)
+      if (mode === "signup") {
         if (data.session) {
           fetch("/api/emails", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ type: "welcome", email: email.trim() }),
           }).catch(() => {});
-
-          window.location.href = '/dashboard';
-        } else if (data.user && !data.session) {
-          // User created but email confirmation required
-          setInfo("Compte créé ! Vérifiez votre boîte email pour confirmer votre inscription.");
+          window.location.href = "/dashboard";
         } else {
-          // Unexpected state
-          console.warn("[Auth] Unexpected signUp state — no session, no user:", data);
-          setInfo("Vérifiez votre email pour confirmer votre inscription.");
+          setInfo("Compte créé ! Vérifiez votre boîte email pour confirmer votre inscription.");
         }
+      } else {
+        window.location.replace("/dashboard");
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("[Auth] Unexpected catch:", err);
-      setError(`Erreur inattendue : ${message}`);
+    } catch {
+      setError("Erreur réseau. Vérifiez votre connexion et réessayez.");
     } finally {
       setLoading(false);
     }

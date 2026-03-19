@@ -2,9 +2,8 @@
 export const dynamic = 'force-dynamic';
 export const fetchCache = 'force-no-store';
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase";
 import { downloadBriefPDF } from "@/lib/pdf";
 import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Logo } from "@/app/components/Logo";
@@ -57,8 +56,6 @@ function ProjectCardSkeleton() {
 // ── Dashboard ───────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
-
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
   const [projects, setProjects] = useState<BriefProject[]>([]);
@@ -89,54 +86,32 @@ export default function Dashboard() {
 
   // ── Load data ──────────────────────────────────────────────────
 
-  // Fast session check — redirect to login before init if no session
-  useEffect(() => {
-    const sb = createClient();
-    if (!sb) return;
-    sb.auth.getSession().then((result: { data: { session: unknown } }) => {
-      if (!result.data.session) {
-        window.location.href = '/login';
-      }
-    });
-  }, []);
-
-  const loadProjects = useCallback(async (uid: string) => {
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    const { data } = await sb
-      .from("projects")
-      .select("*")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
+  const loadProjects = useCallback(async () => {
+    const res = await fetch("/api/projects");
+    if (!res.ok) return;
+    const data = await res.json();
     setProjects((data ?? []).map(mapProject));
   }, []);
 
-  const loadMeetingNotes = useCallback(async (uid: string) => {
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    const { data } = await sb
-      .from("meeting_notes")
-      .select("*")
-      .eq("user_id", uid)
-      .order("created_at", { ascending: false });
+  const loadMeetingNotes = useCallback(async () => {
+    const res = await fetch("/api/notes");
+    if (!res.ok) return;
+    const data = await res.json();
     setMeetingNotes((data ?? []).map(mapNote));
   }, []);
 
   useEffect(() => {
     async function init() {
-      supabaseRef.current = createClient();
-      const sb = supabaseRef.current;
-      if (!sb) { window.location.href = '/login'; return; }
-
-      const { data: { user } } = await sb.auth.getUser();
-      if (!user) { window.location.href = '/login'; return; }
+      const userRes = await fetch("/api/auth/user");
+      if (!userRes.ok) { window.location.href = "/login"; return; }
+      const user = await userRes.json();
 
       setUserEmail(user.email ?? "");
       setUserId(user.id);
       setPlan(getUserPlan());
       setBriefsUsed(getBriefCountThisMonth());
 
-      await Promise.all([loadProjects(user.id), loadMeetingNotes(user.id)]);
+      await Promise.all([loadProjects(), loadMeetingNotes()]);
       setIsLoading(false);
     }
     init();
@@ -153,35 +128,20 @@ export default function Dashboard() {
     e.preventDefault();
     const name = newBriefName.trim();
     if (!name || !userId) return;
-    const sb = supabaseRef.current;
-    if (!sb) return;
 
-    console.log("[CreateBrief] Step 1 — userId:", userId, "name:", name);
+    const res = await fetch("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
 
-    // Step 2 — verify current session user
-    const { data: { user }, error: userError } = await sb.auth.getUser();
-    console.log("[CreateBrief] Step 2 — auth.getUser:", user?.id, "error:", userError);
-    if (!user) { showToast("Session expirée — reconnectez-vous."); return; }
-
-    // Step 3 — attempt insert
-    const slug = `projet-${Math.random().toString(36).substring(2, 7)}`;
-    console.log("[CreateBrief] Step 3 — inserting into projects:", { name, slug, user_id: user.id, status: "pending" });
-    const { data, error } = await sb
-      .from("projects")
-      .insert({ name, slug, user_id: user.id, status: "pending" })
-      .select()
-      .single();
-
-    console.log("[CreateBrief] Step 4 — insert result data:", data, "error:", error);
-
-    if (error) {
-      const msg = `Erreur création : ${error.message} (code: ${error.code})`;
-      console.error("[CreateBrief] Insert failed:", error);
-      showToast(msg);
+    if (!res.ok) {
+      const err = await res.json();
+      showToast(`Erreur création : ${err.error} (code: ${err.code ?? "?"})`);
       return;
     }
 
-    console.log("[CreateBrief] Step 5 — created project:", data.id);
+    const data = await res.json();
     setProjects((prev) => [mapProject(data), ...prev]);
     setBriefsUsed(getBriefCountThisMonth());
     setShowNewBriefModal(false);
@@ -189,9 +149,7 @@ export default function Dashboard() {
   }
 
   async function handleDeleteBrief(id: string) {
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    await sb.from("projects").delete().eq("id", id).eq("user_id", userId);
+    await fetch(`/api/projects/${id}`, { method: "DELETE" });
     setProjects((prev) => prev.filter((p) => p.id !== id));
     setDeleteTargetId(null);
     showToast("Brief supprimé.");
@@ -210,15 +168,13 @@ export default function Dashboard() {
 
   async function saveNotes() {
     if (!notesTargetId) return;
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    const { error } = await sb
-      .from("projects")
-      .update({ notes: notesValue })
-      .eq("id", notesTargetId)
-      .eq("user_id", userId);
+    const res = await fetch(`/api/projects/${notesTargetId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notesValue }),
+    });
 
-    if (error) { showToast("Erreur lors de la sauvegarde."); return; }
+    if (!res.ok) { showToast("Erreur lors de la sauvegarde."); return; }
     setProjects((prev) =>
       prev.map((p) => p.id === notesTargetId ? { ...p, notes: notesValue } : p)
     );
@@ -231,16 +187,15 @@ export default function Dashboard() {
   async function saveNote() {
     const title = noteTitle.trim();
     if (!title || !userId) return;
-    const sb = supabaseRef.current;
-    if (!sb) return;
 
-    const { data, error } = await sb
-      .from("meeting_notes")
-      .insert({ title, content: noteContent.trim(), user_id: userId })
-      .select()
-      .single();
+    const res = await fetch("/api/notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, content: noteContent.trim() }),
+    });
 
-    if (error) { showToast("Erreur lors de la sauvegarde."); return; }
+    if (!res.ok) { showToast("Erreur lors de la sauvegarde."); return; }
+    const data = await res.json();
     setMeetingNotes((prev) => [mapNote(data), ...prev]);
     setShowNoteModal(false);
     setNoteTitle("");
@@ -249,23 +204,19 @@ export default function Dashboard() {
   }
 
   async function handleDeleteNote(id: string) {
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    await sb.from("meeting_notes").delete().eq("id", id).eq("user_id", userId);
+    await fetch(`/api/notes/${id}`, { method: "DELETE" });
     setMeetingNotes((prev) => prev.filter((n) => n.id !== id));
     showToast("Note supprimée.");
   }
 
   async function linkNoteToProject(noteId: string, projectId: string) {
-    const sb = supabaseRef.current;
-    if (!sb) return;
-    const { error } = await sb
-      .from("meeting_notes")
-      .update({ linked_project_id: projectId })
-      .eq("id", noteId)
-      .eq("user_id", userId);
+    const res = await fetch(`/api/notes/${noteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linked_project_id: projectId }),
+    });
 
-    if (error) { showToast("Erreur lors de la liaison."); return; }
+    if (!res.ok) { showToast("Erreur lors de la liaison."); return; }
     setMeetingNotes((prev) =>
       prev.map((n) => n.id === noteId ? { ...n, linkedProjectId: projectId } : n)
     );
@@ -274,8 +225,8 @@ export default function Dashboard() {
   }
 
   async function handleLogout() {
-    await supabaseRef.current?.auth.signOut();
-    window.location.href = '/login';
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
   }
 
   const limit = getBriefLimit();
