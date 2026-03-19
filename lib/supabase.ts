@@ -1,19 +1,18 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-let client: ReturnType<typeof createBrowserClient> | null = null;
-
 export function createClient() {
-  if (typeof window === 'undefined') {
-    // Server/build side — return null, never called at runtime
+  if (typeof window === 'undefined') return null as any;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  console.log('[Debug] URL:', url);
+  console.log('[Debug] Key prefix:', key?.substring(0, 15));
+
+  if (!url || !url.startsWith('http')) {
+    console.error('[Debug] URL invalide:', url);
     return null as any;
   }
-  if (!client) {
-    console.log('[Supabase] URL:', process.env.NEXT_PUBLIC_SUPABASE_URL);
-    console.log('[Supabase] KEY prefix:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.slice(0, 20));
-    client = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-  }
-  return client;
+
+  return createBrowserClient(url, key!);
 }
